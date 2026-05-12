@@ -1,14 +1,11 @@
 import os
 from langchain.schema import Document
-from langchain_chroma import Chroma
-from uuid import uuid4
-from plugins.jobs.utils import MinioLoader, get_embeddings
-from plugins.config.minio_config import (
+from jobs.utils import MinioLoader, get_embeddings
+from config.minio_config import (
     MINIO_ENDPOINT,
     MINIO_ACCESS_KEY,
     MINIO_SECRET_KEY,
 )
-from langchain_community.vectorstores.utils import filter_complex_metadata
 
 
 class DocumentEmbedder:
@@ -38,6 +35,9 @@ class DocumentEmbedder:
         print("========= Initializing Chroma Vector Store =============")
 
         # 1. Create or load the Chroma collection
+        from langchain_chroma import Chroma
+        from uuid import uuid4
+
         vectordb = Chroma(
             collection_name=collection_name,
             embedding_function=self.embeddings,
@@ -47,6 +47,7 @@ class DocumentEmbedder:
         uuids = [str(uuid4()) for _ in splits]
 
         # 2. Filter complex metadata from docling before storing
+        from langchain_community.vectorstores.utils import filter_complex_metadata
         print("Filtering complex metadata before storing...")
         filtered_splits = filter_complex_metadata(splits)
 

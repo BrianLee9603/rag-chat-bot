@@ -5,21 +5,9 @@ from tqdm import tqdm
 import multiprocessing
 from io import BytesIO
 
-# Docling imports
-from langchain_docling.loader import DoclingLoader, ExportType
-from docling.chunking import HybridChunker
-from docling.document_converter import (
-    DocumentConverter,
-    PdfFormatOption,
-)
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from plugins.jobs.utils import get_tokenizer
-
-from plugins.jobs.utils import MinioLoader
-from plugins.config.minio_config import (
+from jobs.utils import get_tokenizer
+from jobs.utils import MinioLoader
+from config.minio_config import (
     MINIO_ENDPOINT,
     MINIO_ACCESS_KEY,
     MINIO_SECRET_KEY,
@@ -33,6 +21,11 @@ def get_num_cpu() -> int:
 
 
 def create_advanced_converter():
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
+    from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+
     pdf_pipeline_options = PdfPipelineOptions()
     pdf_pipeline_options.do_ocr = False
     pdf_pipeline_options.do_table_structure = True  # Bật nhận dạng cấu trúc bảng
@@ -91,6 +84,7 @@ class LoadAndChunk:
     def _init_tokenizer_and_splitter(self):
         """Lazy initialization of tokenizer and splitter"""
         if self.tokenizer is None:
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
             print(
                 "-> Đang khởi tạo tokenizer cho model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
             )
@@ -147,6 +141,8 @@ class LoadAndChunk:
             print(f"\n-> Bắt đầu đọc và chunking tài liệu: {file_path}")
 
             # Khởi tạo DoclingLoader với converter đã tùy chỉnh
+            from langchain_docling.loader import DoclingLoader, ExportType
+            from docling.chunking import HybridChunker
             loader = DoclingLoader(
                 file_path=[file_path],  # DoclingLoader expects a list
                 export_type=ExportType.DOC_CHUNKS,

@@ -7,6 +7,11 @@ services:
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:3
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
     depends_on: &langfuse-depends-on
       postgres:
         condition: service_healthy
@@ -69,6 +74,11 @@ services:
   langfuse-web:
     image: docker.io/langfuse/langfuse:3
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 4G
     depends_on: *langfuse-depends-on
     ports:
       - 3000:3000
@@ -101,10 +111,15 @@ services:
       - 127.0.0.1:9000:9000
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 1s
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
 
   minio:
     image: docker.io/minio/minio
@@ -122,10 +137,15 @@ services:
       - langfuse_minio_data:/data
     healthcheck:
       test: [ "CMD", "mc", "ready", "local" ]
-      interval: 1s
+      interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 1s
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
 
   redis:
     image: docker.io/redis:7
@@ -137,18 +157,18 @@ services:
       - 127.0.0.1:6379:6379
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
-      interval: 3s
-      timeout: 10s
-      retries: 10
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:16-alpine3.22
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 3s
-      timeout: 3s
-      retries: 10
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres # CHANGEME
@@ -156,7 +176,7 @@ services:
       TZ: UTC
       PGTZ: UTC
     ports:
-      - 127.0.0.1:5432:5432
+      - 127.0.0.1:5434:5432
     volumes:
       - langfuse_postgres_data:/var/lib/postgresql/data
 

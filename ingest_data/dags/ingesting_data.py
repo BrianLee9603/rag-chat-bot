@@ -14,10 +14,8 @@ from airflow.utils.trigger_rule import TriggerRule
 # Add plugins directory to Python path
 AIRFLOW_HOME = Path("/opt/airflow")
 sys.path.append(str(AIRFLOW_HOME))
-from plugins.jobs.download import DATASETS, get_dataset_names
-from plugins.jobs.utils import check_src_data
-from plugins.jobs.load_and_chunk import LoadAndChunk
-from plugins.jobs.embed_and_store import DocumentEmbedder
+from jobs.download import DATASETS, get_dataset_names
+from jobs.utils import check_src_data
 from airflow.operators.empty import EmptyOperator
 
 
@@ -104,6 +102,7 @@ def class_already_exists():
 
 @task()
 def load_and_chunk_data():
+    from jobs.load_and_chunk import LoadAndChunk
     loader = LoadAndChunk()
     pdf_files = loader.load_dir(dataset_subfolder)  # Use subfolder
     chunks = loader.read_and_chunk(pdf_files)
@@ -113,6 +112,7 @@ def load_and_chunk_data():
 
 @task(trigger_rule=TriggerRule.ONE_SUCCESS)
 def embed_and_store_data():
+    from jobs.embed_and_store import DocumentEmbedder
     embedder = DocumentEmbedder()
     buffer = embedder.minio_loader.download_object_as_stream(MINIO_PATH)
     splits = pickle.load(buffer)
@@ -142,5 +142,5 @@ with DAG(
     start >> branch
     branch >> [create, exists]  # Branching
     create >> load_chunk >> embed_store  # Process path
-    exists >> embed_store  # Skip path
+    exists >> end_task  # Skip path
     embed_store >> end_task

@@ -205,4 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
-\n# Local secrets\n.webui_secret_key
+
+# Local secrets
+.webui_secret_key
+
+# Storage data
+infrastructure/storage/chromadb/
+infrastructure/storage/data_source/
+

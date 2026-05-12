@@ -50,7 +50,9 @@ x-airflow-common:
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.3}
   &airflow-common
-  build: .
+  build:
+    context: .
+    network: host
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -168,7 +170,6 @@ services:
   airflow-worker:
     <<: *airflow-common
     command: celery worker
-    mem_limit: 8g # Hoặc một giá trị phù hợp hơn với hệ thống của bạn
     healthcheck:
       # yamllint disable rule:line-length
       test:
@@ -309,8 +310,8 @@ services:
       MINIO_ROOT_USER: "minioadmin"
       MINIO_ROOT_PASSWORD: "minioadmin"
     ports:
-      - "9000:9000" # endpoint cho các client
-      - "9001:9001" # MinIO Console UI
+      - "9002:9000" # endpoint cho các client (đổi từ 9000 sang 9002)
+      - "9003:9001" # MinIO Console UI (đổi từ 9001 sang 9003)
     networks:
       - airflow-network
     volumes:
