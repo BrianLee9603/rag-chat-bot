@@ -13,3 +13,8 @@ __pycache__/
 
 # Bỏ qua file lock
 *.lock
+
+# Bỏ qua file nhạy cảm và file backup
+passwords.json
+cookies.txt
+*.bak
