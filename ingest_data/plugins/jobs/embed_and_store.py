@@ -37,11 +37,13 @@ class DocumentEmbedder:
         # 1. Create or load the Chroma collection
         from langchain_chroma import Chroma
         from uuid import uuid4
+        import chromadb
 
+        client = chromadb.HttpClient(host="chromadb-server", port=8000)
         vectordb = Chroma(
+            client=client,
             collection_name=collection_name,
             embedding_function=self.embeddings,
-            persist_directory=persist_directory,
         )
         # 2. Generate unique IDs for each document chunk
         uuids = [str(uuid4()) for _ in splits]

@@ -1,4 +1,4 @@
-FROM apache/airflow:2.10.3
+FROM apache/airflow:3.2.2-python3.12
 
 # Set up C++11 for chromadb and rapidocr- Docling (libgl1)
 USER root
@@ -12,4 +12,4 @@ USER airflow
 
 # Install Python packages
 ADD requirements.txt .
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ apache-airflow==${AIRFLOW_VERSION} -r requirements.txt
+RUN PIP_CONSTRAINT="" pip install --no-cache-dir --default-timeout=1000 -r requirements.txt

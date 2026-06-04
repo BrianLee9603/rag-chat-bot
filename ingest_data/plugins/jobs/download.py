@@ -26,10 +26,6 @@ DATASETS = {
                 "title": "Research on promoting sustainable battery recycling towards a circular battery system-INGO",
                 "url": "https://www.systemiq.earth/wp-content/uploads/2023/11/Systemiq_Sustainable_Battery_Recycling_Full_Study_WEB-1.pdf",
             },
-            {
-                "title": "Greenpeace investigation into trade in toxic lead-acid battery waste-INGO",
-                "url": "https://www.greenpeace.to/greenpeace/wp-content/uploads/2019/09/LEAD-ASTRAY-THE-POISONOUS-LEAD-BATTERY-WASTE-TRADE_GP-1994.pdf",
-            },
         ],
         "description": "Environmental and battery recycling documents",
     },

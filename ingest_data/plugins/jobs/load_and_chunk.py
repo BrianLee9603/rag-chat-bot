@@ -30,8 +30,8 @@ def create_advanced_converter():
     pdf_pipeline_options.do_ocr = False
     pdf_pipeline_options.do_table_structure = True  # Bật nhận dạng cấu trúc bảng
     pdf_pipeline_options.table_structure_options.do_cell_matching = True
-    # Sử dụng chế độ chính xác cao nhất để nhận dạng bảng
-    pdf_pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
+    # Sử dụng chế độ tối ưu hóa bộ nhớ cho nhận dạng bảng
+    pdf_pipeline_options.table_structure_options.mode = TableFormerMode.FAST
 
     # Tạo converter hỗ trợ cả PDF và DOCX
     doc_converter = DocumentConverter(
@@ -46,6 +46,69 @@ def create_advanced_converter():
 
     print("-> Converter đã được cấu hình cho PDF và DOCX")
     return doc_converter
+
+
+def _process_file_in_subprocess(file_path: str, embed_model_id: str, max_tokens: int, chunk_overlap: int):
+    import os
+    import gc
+    
+    # Giới hạn số luồng CPU của PyTorch/OMP để tránh chiếm dụng quá nhiều RAM & CPU
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    
+    try:
+        import torch
+        torch.set_num_threads(1)
+    except ImportError:
+        pass
+
+    from langchain_docling.loader import DoclingLoader, ExportType
+    from docling.chunking import HybridChunker
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from jobs.utils import get_tokenizer
+    from jobs.load_and_chunk import create_advanced_converter
+
+    converter = create_advanced_converter()
+    tokenizer = get_tokenizer()
+    recursive_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+        tokenizer=tokenizer,
+        chunk_size=max_tokens,
+        chunk_overlap=chunk_overlap,
+    )
+
+    loader = DoclingLoader(
+        file_path=[file_path],
+        export_type=ExportType.DOC_CHUNKS,
+        converter=converter,
+        chunker=HybridChunker(tokenizer=embed_model_id),
+    )
+
+    initial_docs = loader.load()
+    
+    final_splits = []
+    for doc in initial_docs:
+        num_tokens = len(
+            tokenizer.encode(doc.page_content, add_special_tokens=False)
+        )
+
+        if num_tokens > max_tokens:
+            sub_splits = recursive_splitter.split_documents([doc])
+            final_splits.extend(sub_splits)
+        else:
+            final_splits.append(doc)
+
+    # Giải phóng tài nguyên trước khi trả về
+    del initial_docs
+    del loader
+    del converter
+    del tokenizer
+    del recursive_splitter
+    gc.collect()
+
+    return final_splits
 
 
 class LoadAndChunk:
@@ -98,24 +161,108 @@ class LoadAndChunk:
                 )
             )
 
-    def read_and_chunk(self, files: Union[str, List[str]]):
-        """
-        Đọc và chia nhỏ tài liệu sử dụng Docling.
+    # def read_and_chunk(self, files: Union[str, List[str]]):
+    #     """
+    #     Đọc và chia nhỏ tài liệu sử dụng Docling.
+    # 
+    #     Args:
+    #         files: Đường dẫn file hoặc danh sách đường dẫn file
+    # 
+    #     Returns:
+    #         List của các Document đã được chia nhỏ
+    #     """
+    #     if isinstance(files, str):
+    #         files = [files]
+    # 
+    #     # Khởi tạo converter và tokenizer
+    #     self._init_converter()
+    #     self._init_tokenizer_and_splitter()
+    # 
+    #     # Filter files that Docling can handle
+    #     supported_files = [
+    #         f for f in files if f.lower().endswith((".pdf", ".docx", ".doc"))
+    #     ]
+    # 
+    #     if not supported_files:
+    #         raise ValueError(
+    #             "No files supported by Docling found. Supported formats: PDF, DOCX, DOC"
+    #         )
+    # 
+    #     if len(supported_files) != len(files):
+    #         unsupported = [f for f in files if f not in supported_files]
+    #         print(
+    #             f"Warning: {len(unsupported)} files not supported by Docling will be skipped: {unsupported}"
+    #         )
+    # 
+    #     print(f"Processing {len(supported_files)} files with Docling...")
+    # 
+    #     all_docs = []
+    # 
+    #     for file_path in tqdm(
+    #         supported_files, desc="Processing files with Docling", unit="file"
+    #     ):
+    #         print(f"\n-> Bắt đầu đọc và chunking tài liệu: {file_path}")
+    # 
+    #         # Khởi tạo DoclingLoader với converter đã tùy chỉnh
+    #         from langchain_docling.loader import DoclingLoader, ExportType
+    #         from docling.chunking import HybridChunker
+    #         loader = DoclingLoader(
+    #             file_path=[file_path],  # DoclingLoader expects a list
+    #             export_type=ExportType.DOC_CHUNKS,
+    #             converter=self.converter,
+    #             chunker=HybridChunker(tokenizer=self.embed_model_id),
+    #         )
+    # 
+    #         # Lấy các chunk ban đầu từ Docling
+    #         initial_docs = loader.load()
+    #         print(f"==> Số chunk ban đầu từ Docling: {len(initial_docs)}")
+    # 
+    #         # Xử lý hậu kỳ để đảm bảo các chunk không vượt quá max_tokens
+    #         print(
+    #             f"-> Bắt đầu xử lý hậu kỳ để đảm bảo các chunk không vượt quá {self.max_tokens} token..."
+    #         )
+    # 
+    #         final_splits = []
+    #         oversized_chunks_count = 0
+    # 
+    #         for doc in initial_docs:
+    #             # Đếm số token trong chunk hiện tại
+    #             num_tokens = len(
+    #                 self.tokenizer.encode(doc.page_content, add_special_tokens=False)
+    #             )
+    # 
+    #             if num_tokens > self.max_tokens:
+    #                 oversized_chunks_count += 1
+    #                 # Nếu chunk quá lớn, dùng recursive_splitter để chia nhỏ nó ra
+    #                 sub_splits = self.recursive_splitter.split_documents([doc])
+    #                 final_splits.extend(sub_splits)
+    #             else:
+    #                 # Nếu chunk có kích thước ổn, giữ nguyên nó
+    #                 final_splits.append(doc)
+    # 
+    #         print(
+    #             f"==> Đã phát hiện và chia nhỏ {oversized_chunks_count} chunk quá khổ."
+    #         )
+    #         print(f"==> Tổng số chunk cuối cùng sau khi xử lý: {len(final_splits)}")
+    # 
+    #         all_docs.extend(final_splits)
+    # 
+    #     return all_docs
 
-        Args:
-            files: Đường dẫn file hoặc danh sách đường dẫn file
-
-        Returns:
-            List của các Document đã được chia nhỏ
+    def read_and_chunk_generator(self, files: Union[str, List[str]]):
         """
+        Đọc và chia nhỏ tài liệu dưới dạng Generator để tiết kiệm RAM.
+        Sử dụng ProcessPoolExecutor để chạy việc convert cho từng file trong một subprocess riêng biệt,
+        tránh tình trạng rò rỉ RAM của các thư viện C++ (Docling, PyPdfium2, PyTorch).
+        Yields:
+            tuple: (file_path, list of final_splits)
+        """
+        import concurrent.futures
+        import gc
+
         if isinstance(files, str):
             files = [files]
 
-        # Khởi tạo converter và tokenizer
-        self._init_converter()
-        self._init_tokenizer_and_splitter()
-
-        # Filter files that Docling can handle
         supported_files = [
             f for f in files if f.lower().endswith((".pdf", ".docx", ".doc"))
         ]
@@ -133,58 +280,43 @@ class LoadAndChunk:
 
         print(f"Processing {len(supported_files)} files with Docling...")
 
-        all_docs = []
+        for file_path in supported_files:
+            print(f"\n-> Bắt đầu đọc và chunking tài liệu (trong subprocess): {file_path}")
 
-        for file_path in tqdm(
-            supported_files, desc="Processing files with Docling", unit="file"
-        ):
-            print(f"\n-> Bắt đầu đọc và chunking tài liệu: {file_path}")
+            # Airflow 3 chạy task instance trong một daemon process, điều này ngăn việc tạo các tiến trình con.
+            # Chúng ta sẽ tạm thời đặt daemon = False, sau đó khôi phục lại.
+            import multiprocessing
+            current_proc = multiprocessing.current_process()
+            is_daemon = current_proc.daemon
+            if is_daemon:
+                current_proc.daemon = False
 
-            # Khởi tạo DoclingLoader với converter đã tùy chỉnh
-            from langchain_docling.loader import DoclingLoader, ExportType
-            from docling.chunking import HybridChunker
-            loader = DoclingLoader(
-                file_path=[file_path],  # DoclingLoader expects a list
-                export_type=ExportType.DOC_CHUNKS,
-                converter=self.converter,
-                chunker=HybridChunker(tokenizer=self.embed_model_id),
-            )
+            try:
+                # Chạy trong một process riêng biệt để giải phóng hoàn toàn bộ nhớ sau khi hoàn thành file
+                with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        _process_file_in_subprocess,
+                        file_path,
+                        self.embed_model_id,
+                        self.max_tokens,
+                        self.chunk_overlap
+                    )
+                    try:
+                        final_splits = future.result()
+                    except Exception as e:
+                        print(f"Lỗi khi xử lý file {file_path} trong subprocess: {e}")
+                        raise e
+            finally:
+                if is_daemon:
+                    current_proc.daemon = True
 
-            # Lấy các chunk ban đầu từ Docling
-            initial_docs = loader.load()
-            print(f"==> Số chunk ban đầu từ Docling: {len(initial_docs)}")
-
-            # Xử lý hậu kỳ để đảm bảo các chunk không vượt quá max_tokens
-            print(
-                f"-> Bắt đầu xử lý hậu kỳ để đảm bảo các chunk không vượt quá {self.max_tokens} token..."
-            )
-
-            final_splits = []
-            oversized_chunks_count = 0
-
-            for doc in initial_docs:
-                # Đếm số token trong chunk hiện tại
-                num_tokens = len(
-                    self.tokenizer.encode(doc.page_content, add_special_tokens=False)
-                )
-
-                if num_tokens > self.max_tokens:
-                    oversized_chunks_count += 1
-                    # Nếu chunk quá lớn, dùng recursive_splitter để chia nhỏ nó ra
-                    sub_splits = self.recursive_splitter.split_documents([doc])
-                    final_splits.extend(sub_splits)
-                else:
-                    # Nếu chunk có kích thước ổn, giữ nguyên nó
-                    final_splits.append(doc)
-
-            print(
-                f"==> Đã phát hiện và chia nhỏ {oversized_chunks_count} chunk quá khổ."
-            )
             print(f"==> Tổng số chunk cuối cùng sau khi xử lý: {len(final_splits)}")
 
-            all_docs.extend(final_splits)
+            yield file_path, final_splits
 
-        return all_docs
+            # Giải phóng bộ nhớ ở main process
+            del final_splits
+            gc.collect()
 
     def ingest_to_minio(self, data, s3_path: str):
         """
@@ -239,15 +371,15 @@ class LoadAndChunk:
         )
         return all_files
 
-    def process_directory(self, dir_path: str):
-        """
-        Xử lý toàn bộ thư mục: tìm file và chia nhỏ.
-
-        Args:
-            dir_path: Đường dẫn thư mục
-
-        Returns:
-            List của các Document đã được chia nhỏ
-        """
-        files = self.load_dir(dir_path)
-        return self.read_and_chunk(files)
+    # def process_directory(self, dir_path: str):
+    #     """
+    #     Xử lý toàn bộ thư mục: tìm file và chia nhỏ.
+    # 
+    #     Args:
+    #         dir_path: Đường dẫn thư mục
+    # 
+    #     Returns:
+    #         List của các Document đã được chia nhỏ
+    #     """
+    #     files = self.load_dir(dir_path)
+    #     return self.read_and_chunk(files)
